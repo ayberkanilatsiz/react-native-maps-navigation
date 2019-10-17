@@ -53,8 +53,6 @@ export default class MapViewNavigation extends Component {
         routeStepCenterTolerance: PropTypes.number,
         routeStepCourseTolerance: PropTypes.number,
         displayDebugMarkers: PropTypes.bool,
-        simulate: PropTypes.bool,
-        options: PropTypes.object
     }
 
     /**
@@ -84,8 +82,6 @@ export default class MapViewNavigation extends Component {
         routeStepCenterTolerance: 0.1,
         routeStepCourseTolerance: 30, // in degress
         displayDebugMarkers: false,
-        simulate: false,
-        options: {}
     }
 
     /**
@@ -103,7 +99,7 @@ export default class MapViewNavigation extends Component {
             language: this.props.language
         });
 
-
+        this.simulator = new Simulator(this);
 
         this.traps = new Traps(this);
 
@@ -209,23 +205,31 @@ export default class MapViewNavigation extends Component {
     }
 
     /**
-     * updatePosition
-     * @param coordinate
-     * @param duration
-     */
-    updatePosition(coordinate, duration = 0)
-    {
-        this.props.map().animateToCoordinate(coordinate, duration);
-    }
-
-    /**
      * updateBearing
      * @param bearing
      * @param duration
      */
-    updateBearing(bearing, duration = false)
+    async updateBearing(coordinates, bearing, duration = false)
     {
-        this.props.map().animateToBearing(bearing, duration || this.props.animationDuration);
+        // this.props.map().animateToBearing(bearing, duration || this.props.animationDuration);
+        // const camera = await this.props.map().getCamera();
+        if(typeof coordinates !== "object"){
+            return;
+        };
+        console.log(coordinates)
+        const Camera = {
+            center:{
+                latitude:coordinates.latitude,
+                longitude:coordinates.longitude
+            },
+            pitch: 10,
+            heading: coordinates.bearing,
+            zoom: 17
+        }
+        this.props.map().animateCamera(Camera,{
+            duration: duration || this.props.animationDuration
+        });
+        // this.props.map().animateToBearing(bearing, duration || this.props.animationDuration);
     }
 
     /**
@@ -280,10 +284,8 @@ export default class MapViewNavigation extends Component {
 
         // update position on map
         if(this.state.navigationMode == NavigationModes.NAVIGATION) {
-
-            this.updatePosition(position);
-
-            this.updateBearing(heading);
+            console.log(position)
+            this.updateBearing(position,heading);
         }
 
         this.setState({position});
@@ -304,21 +306,21 @@ export default class MapViewNavigation extends Component {
      * @param destination
      * @param navigationMode
      */
-    updateRoute(origin = false, destination = false, navigationMode = false, options = null)
+    updateRoute(origin = false, destination = false, navigationMode = false)
     {
         origin = origin || this.props.origin;
         destination = destination || this.props.destination;
         navigationMode = navigationMode || this.props.navigationMode;
-        options = options || this.props.options
 
         switch(navigationMode) {
 
             case NavigationModes.ROUTE:
-                this.displayRoute(origin, destination, options);
+                console.log('*** ROUTE', origin, destination);
+                this.displayRoute(origin, destination);
                 break;
 
             case NavigationModes.NAVIGATION:
-                this.navigateRoute(origin, destination, options);
+                this.navigateRoute(origin, destination);
                 break;
         }
     }
@@ -336,8 +338,9 @@ export default class MapViewNavigation extends Component {
         if(testForRoute && this.state.route) {
             return Promise.resolve(this.state.route);
         }
+
         options = Object.assign({}, {mode: this.state.travelMode}, {mode: this.props.travelMode}, options.constructor == Object ? options : {});
-        
+
         return this.directionsCoder.fetch(origin, destination, options).then(routes => {
 
             if(routes.length) {
@@ -383,7 +386,7 @@ export default class MapViewNavigation extends Component {
             }
 
             return Promise.resolve(route);
-        }).catch((err) => console.log(err));
+        });
     }
 
     /**
@@ -403,10 +406,13 @@ export default class MapViewNavigation extends Component {
             };
 
             this.props.map().animateToRegion(region, this.props.animationDuration);
-            this.props.map().animateToViewingAngle(this.props.navigationViewingAngle, this.props.animationDuration);
-
-            //this.updatePosition(route.origin.coordinate);
-            this.updateBearing(route.initialBearing);
+            const c = {
+                pitch:this.props.navigationViewingAngle
+            }
+            this.props.map().setCamera(c,this.props.animationDuration);
+            // this.props.map().animateToViewingAngle(this.props.navigationViewingAngle, this.props.animationDuration);
+            console.log(route.origin);
+            this.updateBearing(route.origin.coordinate,route.initialBearing);
 
             this.setState({
                 navigationMode: NavigationModes.NAVIGATION,
@@ -416,13 +422,7 @@ export default class MapViewNavigation extends Component {
 
             this.props.onNavigationStarted && this.props.onNavigationStarted();
 
-            if (this.props.simulate) {
-                console.log("SIMULATING ROUTE")
-                this.simulator = new Simulator(this);
-                setTimeout(() => this.simulator.start(route), this.props.animationDuration * 1.5);
-            } else {
-                console.log("NOT SIMULATING")
-            }
+            setTimeout(() => this.simulator.start(route), this.props.animationDuration * 1.5);
 
             return Promise.resolve(route);
         });
